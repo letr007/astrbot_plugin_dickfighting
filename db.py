@@ -26,6 +26,12 @@ class Database:
                 count INTEGER DEFAULT 0
             )
         ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_growth_state (
+                user_id TEXT PRIMARY KEY,
+                last_growth_date TEXT
+            )
+        ''')
         self.conn.commit()
 
     def get_user_length(self, user_id: str):
@@ -113,3 +119,27 @@ class Database:
         )
         self.conn.commit()
         return count
+
+    def get_last_growth_date(self, user_id: str) -> str | None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT last_growth_date FROM user_growth_state WHERE user_id = ?",
+            (user_id,),
+        )
+        result = cursor.fetchone()
+        if not result:
+            return None
+        return result[0]
+
+    def set_last_growth_date(self, user_id: str, date_str: str) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO user_growth_state (user_id, last_growth_date)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+            last_growth_date = excluded.last_growth_date
+            """,
+            (user_id, date_str),
+        )
+        self.conn.commit()

@@ -7,7 +7,7 @@ import asyncio
 import math
 from datetime import datetime
 
-@register("dickfighting", "letr", "斗鸡插件", "0.0.5")
+@register("dickfighting", "letr", "斗鸡插件", "0.0.6")
 class MyPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
@@ -59,6 +59,32 @@ class MyPlugin(Star):
         if self.growth_daily_limit <= 0:
             self.growth_daily_limit = 1
 
+        self.decay_enable = bool(self._get_config_value("decay", "enable", default=False))
+        self.decay_grace_days = self._coerce_int(
+            self._get_config_value("decay", "grace_days", default=3),
+            3,
+        )
+        if self.decay_grace_days < 0:
+            self.decay_grace_days = 0
+
+        self.decay_mode = self._get_config_value("decay", "mode", default="fixed")
+        if self.decay_mode not in ("fixed", "ratio"):
+            self.decay_mode = "fixed"
+
+        self.decay_fixed_per_day = self._coerce_float(
+            self._get_config_value("decay", "fixed_cm_per_day", default=0.5),
+            0.5,
+        )
+        if self.decay_fixed_per_day <= 0:
+            self.decay_fixed_per_day = 0.5
+
+        self.decay_ratio_per_day = self._coerce_float(
+            self._get_config_value("decay", "ratio_per_day", default=0.05),
+            0.05,
+        )
+        if self.decay_ratio_per_day <= 0 or self.decay_ratio_per_day >= 1:
+            self.decay_ratio_per_day = 0.05
+
         self.pvp_timeout_seconds = self._coerce_int(
             self._get_config_value("pvp", "timeout_seconds", default=60),
             60,
@@ -79,6 +105,43 @@ class MyPlugin(Star):
         )
         if self.win_prob_min_length <= 0:
             self.win_prob_min_length = 0.1
+
+    def _apply_decay(self, user_id: str, user_name: str = "") -> None:
+        if not self.decay_enable:
+            return
+        today = datetime.now().date()
+        today_str = today.strftime("%Y-%m-%d")
+        last_date_str = self.db.get_last_growth_date(user_id)
+        if not last_date_str:
+            self.db.set_last_growth_date(user_id, today_str)
+            return
+        try:
+            last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            self.db.set_last_growth_date(user_id, today_str)
+            return
+        days_passed = (today - last_date).days
+        if days_passed <= self.decay_grace_days:
+            return
+        decay_days = days_passed - self.decay_grace_days
+        if decay_days <= 0:
+            return
+
+        current_len = self.db.get_user_length(user_id)
+        if current_len <= 0:
+            self.db.set_last_growth_date(user_id, today_str)
+            return
+
+        if self.decay_mode == "ratio":
+            length = current_len
+            for _ in range(decay_days):
+                length *= 1 - self.decay_ratio_per_day
+        else:
+            length = current_len - decay_days * self.decay_fixed_per_day
+
+        length = max(0.0, round(length, 2))
+        self.db.update_user_length(user_id, user_name, length)
+        self.db.set_last_growth_date(user_id, today_str)
 
     async def initialize(self):
         from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -113,6 +176,7 @@ class MyPlugin(Star):
         uid = event.get_sender_id()
         uname = event.get_sender_name()
 
+        self._apply_decay(uid, uname)
         date_str = datetime.now().strftime("%Y-%m-%d")
         if self.growth_daily_limit > 0:
             used_count = self.db.get_daily_growth_count(uid, date_str)
@@ -131,6 +195,7 @@ class MyPlugin(Star):
             new_len = round(current_len + growth_amount, 2)
             self.db.update_user_length(uid, uname, new_len)
             self.db.increment_daily_growth(uid, date_str)
+            self.db.set_last_growth_date(uid, date_str)
             
             yield event.plain_result(f"✨ {uname} 进行了晨间锻炼！\n长度增加了 {growth_amount} cm，当前总量：{new_len} cm。")
         except Exception as e:
@@ -157,6 +222,7 @@ class MyPlugin(Star):
         
         uid = event.get_sender_id()
         uname = event.get_sender_name()
+        self._apply_decay(uid, uname)
         u_len = self.db.get_user_length(uid)
 
         if u_len < bet:
@@ -201,6 +267,7 @@ class MyPlugin(Star):
         challenge_data = self.active_challenges[gid]["data"]
         p_id = event.get_sender_id()
         p_name = event.get_sender_name()
+        self._apply_decay(p_id, p_name)
 
         if p_id == challenge_data["initiator_id"]:
             yield event.plain_result("你不能左右互搏！")
@@ -260,4 +327,5 @@ class MyPlugin(Star):
             await self.cancel_existing_task(gid)
         if hasattr(self, "db"):
             self.db.close()
+
 
