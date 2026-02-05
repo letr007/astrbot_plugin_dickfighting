@@ -8,9 +8,70 @@ import math
 
 @register("dickfighting", "letr", "斗鸡插件", "0.0.4")
 class MyPlugin(Star):
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config=None):
         super().__init__(context)
+        self.config = config or {}
+        self._load_settings()
         self.active_challenges = {}  # {group_id: {"data": dict, "task": Task}}
+
+    def _get_config_value(self, *keys, default):
+        value = self.config
+        for key in keys:
+            if not isinstance(value, dict):
+                return default
+            value = value.get(key)
+            if value is None:
+                return default
+        return value
+
+    @staticmethod
+    def _coerce_float(value, default):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _coerce_int(value, default):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _load_settings(self):
+        growth_min = self._coerce_float(
+            self._get_config_value("growth", "min_cm", default=0.1),
+            0.1,
+        )
+        growth_max = self._coerce_float(
+            self._get_config_value("growth", "max_cm", default=5.0),
+            5.0,
+        )
+        if growth_min <= 0 or growth_max <= 0 or growth_min > growth_max:
+            growth_min, growth_max = 0.1, 5.0
+        self.growth_min = growth_min
+        self.growth_max = growth_max
+
+        self.pvp_timeout_seconds = self._coerce_int(
+            self._get_config_value("pvp", "timeout_seconds", default=60),
+            60,
+        )
+        if self.pvp_timeout_seconds <= 0:
+            self.pvp_timeout_seconds = 60
+
+        self.win_prob_power = self._coerce_float(
+            self._get_config_value("pvp", "win_power", default=0.7),
+            0.7,
+        )
+        if self.win_prob_power <= 0:
+            self.win_prob_power = 0.7
+
+        self.win_prob_min_length = self._coerce_float(
+            self._get_config_value("pvp", "min_length_for_probability", default=0.1),
+            0.1,
+        )
+        if self.win_prob_min_length <= 0:
+            self.win_prob_min_length = 0.1
 
     async def initialize(self):
         from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -46,7 +107,7 @@ class MyPlugin(Star):
         uname = event.get_sender_name()
         
         # 随机增长量
-        growth_amount = round(random.uniform(0.1, 5.0), 2)
+        growth_amount = round(random.uniform(self.growth_min, self.growth_max), 2)
         
         try:
             # 这里的 update_user_length 逻辑应包含：若不存在则初始化，若存在则累加
@@ -106,7 +167,7 @@ class MyPlugin(Star):
                 "initiator_length": u_len,
                 "bet": bet
             },
-            "task": asyncio.create_task(pvp_timeout(60))
+            "task": asyncio.create_task(pvp_timeout(self.pvp_timeout_seconds))
         }
 
         yield event.plain_result(f"🔥 {uname} 开启了 {bet} cm 的决斗！\n谁敢一战？回复 /comeon 加入战斗。")
@@ -143,9 +204,9 @@ class MyPlugin(Star):
             
             # 胜率计算逻辑：使用幂函数增强弱者胜率
             # $$P_1 = \frac{L_1^{0.7}}{L_1^{0.7} + L_2^{0.7}}$$
-            pow_a = 0.7
-            i_p = math.pow(max(i_len, 0.1), pow_a)
-            p_p = math.pow(max(p_len, 0.1), pow_a)
+            pow_a = self.win_prob_power
+            i_p = math.pow(max(i_len, self.win_prob_min_length), pow_a)
+            p_p = math.pow(max(p_len, self.win_prob_min_length), pow_a)
             win_prob = i_p / (i_p + p_p)
             
             is_init_win = random.random() < win_prob

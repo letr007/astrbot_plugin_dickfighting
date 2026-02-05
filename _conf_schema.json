@@ -1,0 +1,37 @@
+{
+  "growth": {
+    "type": "object",
+    "items": {
+      "min_cm": {
+        "type": "float",
+        "default": 0.1,
+        "description": "Minimum growth per /growth (cm)"
+      },
+      "max_cm": {
+        "type": "float",
+        "default": 5.0,
+        "description": "Maximum growth per /growth (cm)"
+      }
+    }
+  },
+  "pvp": {
+    "type": "object",
+    "items": {
+      "timeout_seconds": {
+        "type": "int",
+        "default": 60,
+        "description": "Challenge timeout in seconds"
+      },
+      "win_power": {
+        "type": "float",
+        "default": 0.7,
+        "description": "Exponent for win probability calculation"
+      },
+      "min_length_for_probability": {
+        "type": "float",
+        "default": 0.1,
+        "description": "Minimum length used in win probability calculation"
+      }
+    }
+  }
+}
