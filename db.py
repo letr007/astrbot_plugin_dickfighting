@@ -19,6 +19,13 @@ class Database:
                 length REAL DEFAULT 0
             )
         ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_daily_growth (
+                user_id TEXT PRIMARY KEY,
+                date TEXT,
+                count INTEGER DEFAULT 0
+            )
+        ''')
         self.conn.commit()
 
     def get_user_length(self, user_id: str):
@@ -68,3 +75,41 @@ class Database:
     def close(self):
         if self.conn:
             self.conn.close()
+
+    def get_daily_growth_count(self, user_id: str, date_str: str) -> int:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT date, count FROM user_daily_growth WHERE user_id = ?",
+            (user_id,),
+        )
+        result = cursor.fetchone()
+        if not result:
+            return 0
+        last_date, count = result
+        if last_date != date_str:
+            return 0
+        return int(count or 0)
+
+    def increment_daily_growth(self, user_id: str, date_str: str) -> int:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT date, count FROM user_daily_growth WHERE user_id = ?",
+            (user_id,),
+        )
+        result = cursor.fetchone()
+        if not result or result[0] != date_str:
+            count = 1
+        else:
+            count = int(result[1] or 0) + 1
+        cursor.execute(
+            """
+            INSERT INTO user_daily_growth (user_id, date, count)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+            date = excluded.date,
+            count = excluded.count
+            """,
+            (user_id, date_str, count),
+        )
+        self.conn.commit()
+        return count

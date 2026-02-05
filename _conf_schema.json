@@ -5,12 +5,17 @@
       "min_cm": {
         "type": "float",
         "default": 0.1,
-        "description": "Minimum growth per /growth (cm)"
+        "description": "单次成长最小值（cm）"
       },
       "max_cm": {
         "type": "float",
         "default": 5.0,
-        "description": "Maximum growth per /growth (cm)"
+        "description": "单次成长最大值（cm）"
+      },
+      "daily_limit": {
+        "type": "int",
+        "default": 1,
+        "description": "每日可成长次数"
       }
     }
   },
@@ -20,17 +25,17 @@
       "timeout_seconds": {
         "type": "int",
         "default": 60,
-        "description": "Challenge timeout in seconds"
+        "description": "挑战超时时间（秒）"
       },
       "win_power": {
         "type": "float",
         "default": 0.7,
-        "description": "Exponent for win probability calculation"
+        "description": "胜率计算指数"
       },
       "min_length_for_probability": {
         "type": "float",
         "default": 0.1,
-        "description": "Minimum length used in win probability calculation"
+        "description": "胜率计算的最小长度"
       }
     }
   }

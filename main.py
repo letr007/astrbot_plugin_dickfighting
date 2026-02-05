@@ -1,12 +1,13 @@
-from astrbot.api.event import filter, AstrMessageEvent
+﻿from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 import random
 import os
 import asyncio
 import math
+from datetime import datetime
 
-@register("dickfighting", "letr", "斗鸡插件", "0.0.4")
+@register("dickfighting", "letr", "斗鸡插件", "0.0.5")
 class MyPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
@@ -51,6 +52,12 @@ class MyPlugin(Star):
             growth_min, growth_max = 0.1, 5.0
         self.growth_min = growth_min
         self.growth_max = growth_max
+        self.growth_daily_limit = self._coerce_int(
+            self._get_config_value("growth", "daily_limit", default=1),
+            1,
+        )
+        if self.growth_daily_limit <= 0:
+            self.growth_daily_limit = 1
 
         self.pvp_timeout_seconds = self._coerce_int(
             self._get_config_value("pvp", "timeout_seconds", default=60),
@@ -105,6 +112,15 @@ class MyPlugin(Star):
         """核心功能：每日成长"""
         uid = event.get_sender_id()
         uname = event.get_sender_name()
+
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        if self.growth_daily_limit > 0:
+            used_count = self.db.get_daily_growth_count(uid, date_str)
+            if used_count >= self.growth_daily_limit:
+                yield event.plain_result(
+                    f"今天的成长已达到上限 ({self.growth_daily_limit} 次)，请明天再来。"
+                )
+                return
         
         # 随机增长量
         growth_amount = round(random.uniform(self.growth_min, self.growth_max), 2)
@@ -114,6 +130,7 @@ class MyPlugin(Star):
             current_len = self.db.get_user_length(uid)
             new_len = round(current_len + growth_amount, 2)
             self.db.update_user_length(uid, uname, new_len)
+            self.db.increment_daily_growth(uid, date_str)
             
             yield event.plain_result(f"✨ {uname} 进行了晨间锻炼！\n长度增加了 {growth_amount} cm，当前总量：{new_len} cm。")
         except Exception as e:
@@ -243,3 +260,4 @@ class MyPlugin(Star):
             await self.cancel_existing_task(gid)
         if hasattr(self, "db"):
             self.db.close()
+
