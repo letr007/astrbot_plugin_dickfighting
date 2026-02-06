@@ -61,6 +61,19 @@ class MyPlugin(Star):
         if self.growth_daily_limit <= 0:
             self.growth_daily_limit = 1
 
+        lu_min = self._coerce_float(
+                self._get_config_value("lu", "lu_min_cm", default=0.1),
+                0.1,
+        )
+        lu_max = self._coerce_float(
+                self._get_config_value("lu", "lu_max_cm", default=1.0),
+                1.0,
+        )
+        if lu_min <= 0 or lu_max <= 0 or lu_min > lu_max:
+            lu_min, lu_max = 0.1, 1
+        self.lu_min = lu_min
+        self.lu_max = lu_max
+
         self.decay_enable = bool(self._get_config_value("decay", "enable", default=False))
         self.decay_grace_days = self._coerce_int(
             self._get_config_value("decay", "grace_days", default=3),
@@ -237,6 +250,25 @@ class MyPlugin(Star):
         self._apply_decay(uid, uname)
         length = self.db.get_user_length(uid)
         yield event.plain_result(f"📏 {uname} 当前长度：{self._fmt_len(length)} cm")
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("lu")
+    async def lu_guan(self, event: AstrMessageEvent):
+        """鹿关""" 
+        uid = event.get_sender_id()
+        uname = event.get_sender_name()
+     
+        # 随机长度
+        lu_length = round(random.uniform(self.lu_min, self.lu_max), 2)
+        
+        try:
+            current_len = self.db.get_user_length(uid)
+            new_len = round(current_len - lu_length, 2)
+            self.db.update_user_length(uid, uname, new_len)
+            yield event.plain_result(f"🦌 机长 {uname} 已成功降落，当前长度：{self._fmt_len(new_len)} cm")
+        except Exception as e:
+            logger.error(f"Lu Error: {e}")
+            yield event.plain_result("手抽筋儿了，停止起飞")
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     @filter.command("pvp")
