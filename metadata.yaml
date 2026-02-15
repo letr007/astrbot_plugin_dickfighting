@@ -1,6 +1,6 @@
-name: astrbot_plugin_dickfighting # 插件唯一识别名，以 astrbot_plugin_ 前缀开头
-display_name: BattleDick | 战弟风云 # 用于展示的名字，可以是方便人类阅读的名字（需要版本 >= v4.5.0，低版本不会报错，请放心填写）
-desc: Astrbot 斗鸡插件，让dick作出回答！ # 插件简短描述
-version: v0.0.7 # 插件版本号。格式：v1.1.1 或者 v1.1
-author: letr # 作者
-repo: https://github.com/letr007/astrbot_plugin_dickfighting # 插件的仓库地址
+﻿name: astrbot_plugin_dickfighting # 鎻掍欢鍞竴璇嗗埆鍚嶏紝浠?astrbot_plugin_ 鍓嶇紑寮€澶?
+display_name: BattleDick | 鎴樺紵椋庝簯 # 鐢ㄤ簬灞曠ず鐨勫悕瀛楋紝鍙互鏄柟渚夸汉绫婚槄璇荤殑鍚嶅瓧锛堥渶瑕佺増鏈?>= v4.5.0锛屼綆鐗堟湰涓嶄細鎶ラ敊锛岃鏀惧績濉啓锛?
+desc: Astrbot 鏂楅浮鎻掍欢锛岃dick浣滃嚭鍥炵瓟锛?# 鎻掍欢绠€鐭弿杩?
+version: v0.0.9
+author: letr # 浣滆€?
+repo: https://github.com/letr007/astrbot_plugin_dickfighting # 鎻掍欢鐨勪粨搴撳湴鍧€

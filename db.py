@@ -1,6 +1,6 @@
 import sqlite3
-import os
 from pathlib import Path
+
 
 class Database:
     def __init__(self, db_path: str):
@@ -16,152 +16,168 @@ class Database:
         if self.conn is None:
             self.conn = sqlite3.connect(self.db_path)
 
-    def _init_db(self):
+    def _init_db(self) -> None:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
         cursor = self.conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS user_dick_stats (
                 user_id TEXT PRIMARY KEY,
                 user_name TEXT,
                 length REAL DEFAULT 0
             )
-        ''')
-        cursor.execute('''
+            """
+        )
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS user_milk_stats (
                 user_id TEXT PRIMARY KEY,
                 user_name TEXT,
                 milk_ml REAL DEFAULT 0
             )
-        ''')
-        cursor.execute('''
+            """
+        )
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS user_daily_growth (
                 user_id TEXT PRIMARY KEY,
                 date TEXT,
                 count INTEGER DEFAULT 0
             )
-        ''')
-        cursor.execute('''
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_daily_lu (
+                user_id TEXT PRIMARY KEY,
+                date TEXT,
+                count INTEGER DEFAULT 0
+            )
+            """
+        )
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS user_growth_state (
                 user_id TEXT PRIMARY KEY,
                 last_growth_date TEXT
             )
-        ''')
+            """
+        )
         self.conn.commit()
 
-    def get_user_length(self, user_id: str):
+    def get_user_length(self, user_id: str) -> float:
         self._ensure_conn()
         cursor = self.conn.cursor()
-        cursor.execute('SELECT length FROM user_dick_stats WHERE user_id = ?', (user_id,))
+        cursor.execute(
+            "SELECT length FROM user_dick_stats WHERE user_id = ?",
+            (user_id,),
+        )
         result = cursor.fetchone()
-        if result:
-            return self._round_length(result[0])
-        return 0.0
+        if not result:
+            return 0.0
+        return self._round_length(result[0])
 
-    def update_user_length(self, user_id: str, user_name: str, length: float):
+    def update_user_length(self, user_id: str, user_name: str, length: float) -> None:
         self._ensure_conn()
-        length = self._round_length(length)
+        safe_length = max(0.0, self._round_length(length))
         cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO user_dick_stats (user_id, user_name, length) 
+        cursor.execute(
+            """
+            INSERT INTO user_dick_stats (user_id, user_name, length)
             VALUES (?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
             length = excluded.length,
             user_name = excluded.user_name
-        ''', (user_id, user_name, length))
+            """,
+            (user_id, user_name, safe_length),
+        )
         self.conn.commit()
+
+    def adjust_user_length(
+        self,
+        user_id: str,
+        delta: float,
+        user_name: str = "",
+    ) -> float:
+        current_length = self.get_user_length(user_id)
+        new_length = max(0.0, current_length + delta)
+        self.update_user_length(user_id, user_name, new_length)
+        return self._round_length(new_length)
 
     def get_user_milk(self, user_id: str) -> float:
         self._ensure_conn()
         cursor = self.conn.cursor()
-        cursor.execute('SELECT milk_ml FROM user_milk_stats WHERE user_id = ?', (user_id,))
+        cursor.execute(
+            "SELECT milk_ml FROM user_milk_stats WHERE user_id = ?",
+            (user_id,),
+        )
         result = cursor.fetchone()
-        if result:
-            return self._round_length(result[0])
-        return 0.0
+        if not result:
+            return 0.0
+        return self._round_length(result[0])
 
-    def adjust_user_milk(self, user_id: str, delta: float, user_name: str = "") -> float:
-        self._ensure_conn()
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT milk_ml FROM user_milk_stats WHERE user_id = ?', (user_id,))
-        result = cursor.fetchone()
-        if result:
-            new_milk = max(0.0, result[0] + delta)
-        else:
-            if delta > 0:
-                new_milk = delta
-                cursor.execute(
-                    'INSERT INTO user_milk_stats (user_id, user_name, milk_ml) VALUES (?, ?, ?)',
-                    (user_id, user_name, new_milk),
-                )
-            else:
-                new_milk = 0.0
-        new_milk = self._round_length(new_milk)
-        if result or delta > 0:
-            cursor.execute('''
-                INSERT INTO user_milk_stats (user_id, user_name, milk_ml)
-                VALUES (?, ?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
-                milk_ml = excluded.milk_ml,
-                user_name = excluded.user_name
-            ''', (user_id, user_name, new_milk))
-        self.conn.commit()
-        return new_milk
-
-    def adjust_user_length(self, user_id: str, delta: float, user_name: str = ""):
-        """调整用户长度（正数为增加，负数为减少）"""
-        self._ensure_conn()
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT length FROM user_dick_stats WHERE user_id = ?', (user_id,))
-        result = cursor.fetchone()
-        if result:
-            new_length = max(0.0, result[0] + delta)  # 长度不能为负
-        else:
-            # 用户不存在，如果 delta 为正则创建，否则忽略（长度保持0）
-            if delta > 0:
-                new_length = delta
-                cursor.execute(
-                    'INSERT INTO user_dick_stats (user_id, user_name, length) VALUES (?, ?, ?)',
-                    (user_id, user_name, new_length),
-                )
-            else:
-                new_length = 0.0
-        new_length = self._round_length(new_length)
-        if result or delta > 0:
-            cursor.execute('''
-                INSERT INTO user_dick_stats (user_id, user_name, length)
-                VALUES (?, ?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
-                length = excluded.length,
-                user_name = excluded.user_name
-            ''', (user_id, user_name, new_length))
-        self.conn.commit()
-        return new_length
-
-    def close(self):
-        if self.conn:
-            self.conn.close()
-
-    def get_daily_growth_count(self, user_id: str, date_str: str) -> int:
+    def adjust_user_milk(
+        self, user_id: str, delta: float, user_name: str = ""
+    ) -> float:
         self._ensure_conn()
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT date, count FROM user_daily_growth WHERE user_id = ?",
+            "SELECT milk_ml FROM user_milk_stats WHERE user_id = ?",
+            (user_id,),
+        )
+        result = cursor.fetchone()
+
+        current_milk = float(result[0]) if result else 0.0
+        new_milk = max(0.0, current_milk + delta)
+        new_milk = self._round_length(new_milk)
+
+        cursor.execute(
+            """
+            INSERT INTO user_milk_stats (user_id, user_name, milk_ml)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+            milk_ml = excluded.milk_ml,
+            user_name = excluded.user_name
+            """,
+            (user_id, user_name, new_milk),
+        )
+        self.conn.commit()
+        return new_milk
+
+    def get_daily_growth_count(self, user_id: str, date_str: str) -> int:
+        return self._get_daily_count("user_daily_growth", user_id, date_str)
+
+    def increment_daily_growth(self, user_id: str, date_str: str) -> int:
+        return self._increment_daily_count("user_daily_growth", user_id, date_str)
+
+    def get_daily_lu_count(self, user_id: str, date_str: str) -> int:
+        return self._get_daily_count("user_daily_lu", user_id, date_str)
+
+    def increment_daily_lu(self, user_id: str, date_str: str) -> int:
+        return self._increment_daily_count("user_daily_lu", user_id, date_str)
+
+    def _get_daily_count(self, table: str, user_id: str, date_str: str) -> int:
+        self._ensure_conn()
+        cursor = self.conn.cursor()
+        cursor.execute(
+            f"SELECT date, count FROM {table} WHERE user_id = ?",
             (user_id,),
         )
         result = cursor.fetchone()
         if not result:
             return 0
+
         last_date, count = result
         if last_date != date_str:
             return 0
         return int(count or 0)
 
-    def increment_daily_growth(self, user_id: str, date_str: str) -> int:
+    def _increment_daily_count(self, table: str, user_id: str, date_str: str) -> int:
         self._ensure_conn()
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT date, count FROM user_daily_growth WHERE user_id = ?",
+            f"SELECT date, count FROM {table} WHERE user_id = ?",
             (user_id,),
         )
         result = cursor.fetchone()
@@ -169,9 +185,10 @@ class Database:
             count = 1
         else:
             count = int(result[1] or 0) + 1
+
         cursor.execute(
-            """
-            INSERT INTO user_daily_growth (user_id, date, count)
+            f"""
+            INSERT INTO {table} (user_id, date, count)
             VALUES (?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
             date = excluded.date,
@@ -207,3 +224,7 @@ class Database:
             (user_id, date_str),
         )
         self.conn.commit()
+
+    def close(self) -> None:
+        if self.conn:
+            self.conn.close()

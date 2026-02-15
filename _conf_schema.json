@@ -1,152 +1,170 @@
 {
-  "growth": {
-    "type": "object",
-    "items": {
-      "min_cm": {
-        "type": "float",
-        "default": 0.1,
-        "description": "单次成长最小值（cm）",
-        "hint": "增长范围为 [最小值, 最大值]"
-      },
-      "max_cm": {
-        "type": "float",
-        "default": 5.0,
-        "description": "单次成长最大值（cm）",
-        "hint": "增长范围为 [最小值, 最大值]"
-      },
-      "daily_limit": {
-        "type": "int",
-        "default": 1,
-        "description": "每日可成长次数",
-        "hint": "超过次数将提示明天再来"
-      }
+    "growth": {
+        "type": "object",
+        "items": {
+            "min_cm": {
+                "type": "float",
+                "default": 0.1,
+                "description": "单次成长最小值（cm）",
+                "hint": "增长范围为 [最小值, 最大值]"
+            },
+            "max_cm": {
+                "type": "float",
+                "default": 5.0,
+                "description": "单次成长最大值（cm）",
+                "hint": "增长范围为 [最小值, 最大值]"
+            },
+            "daily_limit": {
+                "type": "int",
+                "default": 1,
+                "description": "每日可成长次数",
+                "hint": "超过次数将提示明天再来"
+            }
+        }
+    },
+    "lu": {
+        "type": "object",
+        "items": {
+            "lu_min_cm": {
+                "type": "float",
+                "default": 0.1,
+                "description": "单次鹿关减少最小值（cm）",
+                "hint": "减少范围为 [最小值, 最大值]"
+            },
+            "lu_max_cm": {
+                "type": "float",
+                "default": 0.5,
+                "description": "单次鹿关减少最大值（cm）",
+                "hint": "减少范围为 [最小值, 最大值]"
+            },
+            "lu_cp_num": {
+                "type": "int",
+                "default": 3,
+                "description": "鹿关疲劳惩罚最低次数",
+                "hint": "此值决定鹿关多少次以后消耗增加"
+            },
+            "lu_cp_mag": {
+                "type": "float",
+                "default": 0.1,
+                "description": "鹿关疲劳后惩罚倍率",
+                "hint": "疲劳惩罚消耗长度倍率"
+            }
+        }
+    },
+    "milk": {
+        "type": "object",
+        "items": {
+            "milk_min_ml": {
+                "type": "float",
+                "default": 5.0,
+                "description": "单次鹿关产出金液最小值（ml）",
+                "hint": "产出范围为 [最小值, 最大值]"
+            },
+            "milk_max_ml": {
+                "type": "float",
+                "default": 30.0,
+                "description": "单次鹿关产出金液最大值（ml）",
+                "hint": "产出范围为 [最小值, 最大值]"
+            }
+        }
+    },
+    "decay": {
+        "type": "object",
+        "items": {
+            "enable": {
+                "type": "bool",
+                "default": false,
+                "description": "启用长时间未成长衰减"
+            },
+            "grace_days": {
+                "type": "int",
+                "default": 3,
+                "description": "衰减宽限天数",
+                "hint": "超过宽限天数才开始衰减",
+                "condition": {
+                    "enable": true
+                }
+            },
+            "mode": {
+                "type": "string",
+                "default": "fixed",
+                "description": "衰减方式",
+                "options": [
+                    "fixed",
+                    "ratio"
+                ],
+                "labels": [
+                    "固定值",
+                    "比例值"
+                ],
+                "condition": {
+                    "enable": true
+                }
+            },
+            "fixed_cm_per_day": {
+                "type": "float",
+                "default": 0.5,
+                "description": "每日固定衰减值（cm）",
+                "condition": {
+                    "enable": true,
+                    "mode": "fixed"
+                }
+            },
+            "ratio_per_day": {
+                "type": "float",
+                "default": 0.05,
+                "description": "每日衰减比例",
+                "hint": "0-1 之间，例如 0.05 表示每天减少 5%",
+                "condition": {
+                    "enable": true,
+                    "mode": "ratio"
+                }
+            }
+        }
+    },
+    "pvp": {
+        "type": "object",
+        "items": {
+            "timeout_seconds": {
+                "type": "int",
+                "default": 60,
+                "description": "挑战超时时间（秒）"
+            },
+            "win_power": {
+                "type": "float",
+                "default": 0.7,
+                "description": "胜率计算指数",
+                "hint": "公式 P1 = log(1+L1)^a / (log(1+L1)^a + log(1+L2)^a)，此处 a 为指数"
+            },
+            "min_length_for_probability": {
+                "type": "float",
+                "default": 0.1,
+                "description": "胜率计算的最小长度",
+                "hint": "避免长度过小导致计算异常"
+            },
+            "odds_enable": {
+                "type": "bool",
+                "default": false,
+                "description": "启用动态赔率"
+            },
+            "odds_min": {
+                "type": "float",
+                "default": 0.6,
+                "description": "动态赔率最小倍数",
+                "hint": "强者获胜时采用较小倍数",
+                "condition": {
+                    "odds_enable": true
+                }
+            },
+            "odds_max": {
+                "type": "float",
+                "default": 1.6,
+                "description": "动态赔率最大倍数",
+                "hint": "弱者获胜时采用较大倍数",
+                "condition": {
+                    "odds_enable": true
+                }
+            }
+        }
     }
-  },
-  "lu": {
-    "type": "object",
-    "items": {
-      "lu_min_cm": {
-        "type": "float",
-        "default": 0.1,
-        "description": "单次鹿关减少最小值（cm）",
-        "hint": "减少范围为 [最小值, 最大值]"
-      },
-      "lu_max_cm": {
-        "type": "float",
-        "default": 0.5,
-        "description": "单次鹿关减少最大值（cm）",
-        "hint": "减少范围为 [最小值, 最大值]"
-      }
-    }
-  },
-  "milk": {
-    "type": "object",
-    "items": {
-      "milk_min_ml": {
-        "type": "float",
-        "default": 5.0,
-        "description": "单次鹿关产出金液最小值（ml）",
-        "hint": "产出范围为 [最小值, 最大值]"
-      },
-      "milk_max_ml": {
-        "type": "float",
-        "default": 30.0,
-        "description": "单次鹿关产出金液最大值（ml）",
-        "hint": "产出范围为 [最小值, 最大值]"
-      }
-    }
-  },
-  "decay": {
-    "type": "object",
-    "items": {
-      "enable": {
-        "type": "bool",
-        "default": false,
-        "description": "启用长时间未成长衰减"
-      },
-      "grace_days": {
-        "type": "int",
-        "default": 3,
-        "description": "衰减宽限天数",
-        "hint": "超过宽限天数才开始衰减",
-        "condition": {
-          "enable": true
-        }
-      },
-      "mode": {
-        "type": "string",
-        "default": "fixed",
-        "description": "衰减方式",
-        "options": ["fixed", "ratio"],
-        "labels": ["固定值", "比例值"],
-        "condition": {
-          "enable": true
-        }
-      },
-      "fixed_cm_per_day": {
-        "type": "float",
-        "default": 0.5,
-        "description": "每日固定衰减值（cm）",
-        "condition": {
-          "enable": true,
-          "mode": "fixed"
-        }
-      },
-      "ratio_per_day": {
-        "type": "float",
-        "default": 0.05,
-        "description": "每日衰减比例",
-        "hint": "0-1 之间，例如 0.05 表示每天减少 5%",
-        "condition": {
-          "enable": true,
-          "mode": "ratio"
-        }
-      }
-    }
-  },
-  "pvp": {
-    "type": "object",
-    "items": {
-      "timeout_seconds": {
-        "type": "int",
-        "default": 60,
-        "description": "挑战超时时间（秒）"
-      },
-      "win_power": {
-        "type": "float",
-        "default": 0.7,
-        "description": "胜率计算指数",
-        "hint": "公式 P1 = log(1+L1)^a / (log(1+L1)^a + log(1+L2)^a)，此处 a 为指数"
-      },
-      "min_length_for_probability": {
-        "type": "float",
-        "default": 0.1,
-        "description": "胜率计算的最小长度",
-        "hint": "避免长度过小导致计算异常"
-      },
-      "odds_enable": {
-        "type": "bool",
-        "default": false,
-        "description": "启用动态赔率"
-      },
-      "odds_min": {
-        "type": "float",
-        "default": 0.6,
-        "description": "动态赔率最小倍数",
-        "hint": "强者获胜时采用较小倍数",
-        "condition": {
-          "odds_enable": true
-        }
-      },
-      "odds_max": {
-        "type": "float",
-        "default": 1.6,
-        "description": "动态赔率最大倍数",
-        "hint": "弱者获胜时采用较大倍数",
-        "condition": {
-          "odds_enable": true
-        }
-      }
-    }
-  }
 }

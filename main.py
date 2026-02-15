@@ -1,14 +1,17 @@
-﻿from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star, StarTools, register
-from astrbot.api import logger
-import random
 import asyncio
 import math
-from datetime import datetime
+import random
 import secrets
+from datetime import datetime
+
+from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.star import Context, Star, StarTools, register
+
 from .db import Database
 
-@register("dickfighting", "letr", "斗鸡插件", "0.0.8")
+
+@register("dickfighting", "letr", "斗鸡插件", "0.0.9")
 class MyPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
@@ -62,17 +65,29 @@ class MyPlugin(Star):
             self.growth_daily_limit = 1
 
         lu_min = self._coerce_float(
-                self._get_config_value("lu", "lu_min_cm", default=0.1),
-                0.1,
+            self._get_config_value("lu", "lu_min_cm", default=0.1),
+            0.1,
         )
         lu_max = self._coerce_float(
-                self._get_config_value("lu", "lu_max_cm", default=1.0),
-                1.0,
+            self._get_config_value("lu", "lu_max_cm", default=1.0),
+            1.0,
         )
         if lu_min <= 0 or lu_max <= 0 or lu_min > lu_max:
             lu_min, lu_max = 0.1, 1
         self.lu_min = lu_min
         self.lu_max = lu_max
+        self.lu_cp_num = self._coerce_int(
+            self._get_config_value("lu", "lu_cp_num", default=3),
+            3,
+        )
+        if self.lu_cp_num < 0:
+            self.lu_cp_num = 0
+        self.lu_cp_mag = self._coerce_float(
+            self._get_config_value("lu", "lu_cp_mag", default=0.1),
+            0.1,
+        )
+        if self.lu_cp_mag < 0:
+            self.lu_cp_mag = 0.0
         milk_min = self._coerce_float(
             self._get_config_value("milk", "milk_min_ml", default=5.0),
             5.0,
@@ -86,7 +101,9 @@ class MyPlugin(Star):
         self.milk_min = milk_min
         self.milk_max = milk_max
 
-        self.decay_enable = bool(self._get_config_value("decay", "enable", default=False))
+        self.decay_enable = bool(
+            self._get_config_value("decay", "enable", default=False)
+        )
         self.decay_grace_days = self._coerce_int(
             self._get_config_value("decay", "grace_days", default=3),
             3,
@@ -160,6 +177,47 @@ class MyPlugin(Star):
     def _fmt_len(value: float) -> str:
         return f"{round(float(value), 2):.2f}"
 
+    @staticmethod
+    def _clamp(value: float, low: float, high: float) -> float:
+        return max(low, min(high, value))
+
+    def _calc_lu_fatigue_pressure(self, lu_count: int, current_len: float) -> float:
+        """Return fatigue pressure used to skew random consume/reward distributions."""
+        if self.lu_cp_mag <= 0 or lu_count <= self.lu_cp_num:
+            return 0.0
+
+        over_limit = lu_count - self.lu_cp_num
+        length_ratio = current_len / (current_len + 25.0)
+        length_factor = 0.45 + 1.25 * length_ratio
+        pressure = math.pow(over_limit, 1.15) * self.lu_cp_mag * length_factor
+        return self._clamp(pressure, 0.0, 5.0)
+
+    def _roll_lu_outcome(
+        self,
+        current_len: float,
+        lu_count: int,
+    ) -> tuple[float, float, float]:
+        pressure = self._calc_lu_fatigue_pressure(lu_count, current_len)
+
+        consume_min = self.lu_min * (1.0 + pressure * 0.08)
+        consume_max = self.lu_max * (1.0 + pressure * 0.35)
+        if consume_min > consume_max:
+            consume_min = consume_max
+        consume_mode_bias = self._clamp(0.5 + pressure * 0.22, 0.5, 0.96)
+        consume_mode = consume_min + (consume_max - consume_min) * consume_mode_bias
+        lu_length = self._rng.triangular(consume_min, consume_max, consume_mode)
+        lu_length = self._clamp(lu_length, 0.0, current_len)
+
+        milk_min = self.milk_min * max(0.15, 1.0 - pressure * 0.10)
+        milk_max = self.milk_max * max(0.25, 1.0 - pressure * 0.20)
+        if milk_min > milk_max:
+            milk_min = milk_max
+        milk_mode_bias = self._clamp(0.5 - pressure * 0.20, 0.04, 0.5)
+        milk_mode = milk_min + (milk_max - milk_min) * milk_mode_bias
+        milk_amount = self._rng.triangular(milk_min, milk_max, milk_mode)
+
+        return round(lu_length, 2), round(milk_amount, 2), pressure
+
     def _apply_decay(self, user_id: str, user_name: str = "") -> None:
         if not self.decay_enable:
             return
@@ -205,7 +263,7 @@ class MyPlugin(Star):
         """安全获取群组ID标识"""
         try:
             return event.get_group_id() or f"private_{event.get_sender_id()}"
-        except:
+        except Exception:
             return str(event.get_sender_id())
 
     async def cancel_existing_task(self, gid: str):
@@ -229,13 +287,13 @@ class MyPlugin(Star):
             used_count = self.db.get_daily_growth_count(uid, date_str)
             if used_count >= self.growth_daily_limit:
                 yield event.plain_result(
-                        f"今天的锻炼已达到上限 ({self.growth_daily_limit} 次)，注意身体哦"
+                    f"今天的锻炼已达到上限 ({self.growth_daily_limit} 次)，注意身体哦"
                 )
                 return
-        
+
         # 随机增长量
         growth_amount = round(random.uniform(self.growth_min, self.growth_max), 2)
-        
+
         try:
             # 这里的 update_user_length 逻辑应包含：若不存在则初始化，若存在则累加
             current_len = self.db.get_user_length(uid)
@@ -243,7 +301,7 @@ class MyPlugin(Star):
             self.db.update_user_length(uid, uname, new_len)
             self.db.increment_daily_growth(uid, date_str)
             self.db.set_last_growth_date(uid, date_str)
-            
+
             yield event.plain_result(
                 f"✨ {uname} 进行了晨间锻炼！\n"
                 f"长度增加了 {self._fmt_len(growth_amount)} cm，"
@@ -266,22 +324,32 @@ class MyPlugin(Star):
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     @filter.command("lu")
     async def lu_guan(self, event: AstrMessageEvent):
-        """鹿关""" 
+        """鹿关"""
         uid = event.get_sender_id()
         uname = event.get_sender_name()
-     
-        # 随机长度
-        lu_length = round(random.uniform(self.lu_min, self.lu_max), 2)
-        milk_amount = round(random.uniform(self.milk_min, self.milk_max), 2)
-        
+
         try:
             current_len = self.db.get_user_length(uid)
-            new_len = round(current_len - lu_length, 2)
+            if current_len <= 0:
+                yield event.plain_result("⚠️ 当前长度为 0，无法鹿关，请先使用 /growth。")
+                return
+
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            lu_count = self.db.increment_daily_lu(uid, date_str)
+            lu_length, milk_amount, pressure = self._roll_lu_outcome(
+                current_len, lu_count
+            )
+            new_len = round(max(0.0, current_len - lu_length), 2)
             self.db.update_user_length(uid, uname, new_len)
             self.db.adjust_user_milk(uid, milk_amount, uname)
+
+            fatigue_msg = ""
+            if pressure > 0:
+                fatigue_msg = f"\n😵 疲劳惩罚：第 {lu_count} 次，收益下滑、消耗上升"
             yield event.plain_result(
                 f"🦌 机长 {uname} 已成功降落，当前长度：{self._fmt_len(new_len)} cm\n"
                 f"🥛 产生金液 {self._fmt_len(milk_amount)} ml"
+                f"{fatigue_msg}"
             )
         except Exception as e:
             logger.error(f"Lu Error: {e}")
@@ -302,27 +370,30 @@ class MyPlugin(Star):
         """发起挑战"""
         gid = self.get_gid(event)
         args = event.message_str.strip().split()
-        
+
         if len(args) < 2:
             yield event.plain_result("⚠️ 格式错误。正确用法：/pvp [赌注长度]")
             return
-            
+
         try:
             bet = round(float(args[1]), 2)
-            if bet <= 0: raise ValueError
+            if bet <= 0:
+                raise ValueError
         except ValueError:
             yield event.plain_result("❌ 赌注必须是正数。")
             return
-        
+
         uid = event.get_sender_id()
         uname = event.get_sender_name()
         self._apply_decay(uid, uname)
         u_len = self.db.get_user_length(uid)
 
         if u_len < bet:
-            yield event.plain_result(f"你的长度不足 {bet} cm，无法发起如此豪赌！(当前: {u_len} cm)")
+            yield event.plain_result(
+                f"你的长度不足 {bet} cm，无法发起如此豪赌！(当前: {u_len} cm)"
+            )
             return
-        
+
         # 清理该群旧对局
         await self.cancel_existing_task(gid)
 
@@ -332,9 +403,11 @@ class MyPlugin(Star):
                 await asyncio.sleep(seconds)
                 if gid in self.active_challenges:
                     del self.active_challenges[gid]
-                    await event.send(event.plain_result(f"💤 {uname} 的挑战因无人应战已作废。"))
+                    await event.send(
+                        event.plain_result(f"💤 {uname} 的挑战因无人应战已作废。")
+                    )
             except asyncio.CancelledError:
-                pass 
+                pass
 
         # 记录状态
         self.active_challenges[gid] = {
@@ -342,21 +415,23 @@ class MyPlugin(Star):
                 "initiator_id": uid,
                 "initiator_name": uname,
                 "initiator_length": u_len,
-                "bet": bet
+                "bet": bet,
             },
-            "task": asyncio.create_task(pvp_timeout(self.pvp_timeout_seconds))
+            "task": asyncio.create_task(pvp_timeout(self.pvp_timeout_seconds)),
         }
 
-        yield event.plain_result(f"🔥 {uname} 开启了 {bet} cm 的决斗！\n谁敢一战？回复 /comeon 加入战斗。")
+        yield event.plain_result(
+            f"🔥 {uname} 开启了 {bet} cm 的决斗！\n谁敢一战？回复 /comeon 加入战斗。"
+        )
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     @filter.command("comeon")
     async def pvp_join(self, event: AstrMessageEvent):
         """响应挑战"""
         gid = self.get_gid(event)
-        
+
         if gid not in self.active_challenges:
-            return # 保持安静，不干扰正常聊天
+            return  # 保持安静，不干扰正常聊天
 
         challenge_data = self.active_challenges[gid]["data"]
         p_id = event.get_sender_id()
@@ -379,7 +454,7 @@ class MyPlugin(Star):
 
         try:
             i_len = challenge_data["initiator_length"]
-            
+
             # 胜率计算逻辑：先对长度做 log 缩放，削弱超长带来的差距
             # $$P_1 = \frac{log(1+L_1)^a}{log(1+L_1)^a + log(1+L_2)^a}$$
             pow_a = self.win_prob_power
@@ -388,15 +463,21 @@ class MyPlugin(Star):
             i_p = math.pow(i_base, pow_a)
             p_p = math.pow(p_base, pow_a)
             win_prob = i_p / (i_p + p_p)
-            
+
             is_init_win = self._rng.random() < win_prob
-            
+
             if is_init_win:
-                win_id, win_name = challenge_data["initiator_id"], challenge_data["initiator_name"]
+                win_id, win_name = (
+                    challenge_data["initiator_id"],
+                    challenge_data["initiator_name"],
+                )
                 lose_id, lose_name = p_id, p_name
             else:
                 win_id, win_name = p_id, p_name
-                lose_id, lose_name = challenge_data["initiator_id"], challenge_data["initiator_name"]
+                lose_id, lose_name = (
+                    challenge_data["initiator_id"],
+                    challenge_data["initiator_name"],
+                )
 
             winner_prob = win_prob if is_init_win else 1 - win_prob
             odds = self._calc_odds(winner_prob)
@@ -408,7 +489,7 @@ class MyPlugin(Star):
             # 结算
             self.db.adjust_user_length(win_id, effective_bet, win_name)
             self.db.adjust_user_length(lose_id, -effective_bet, lose_name)
-            
+
             res_win = self.db.get_user_length(win_id)
             res_lose = self.db.get_user_length(lose_id)
 
@@ -432,6 +513,3 @@ class MyPlugin(Star):
             await self.cancel_existing_task(gid)
         if hasattr(self, "db"):
             self.db.close()
-
-
-
